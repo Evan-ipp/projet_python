@@ -70,7 +70,7 @@ for ticker in etfs :
   prix[ticker]=prix[ticker][prix[ticker]["Close"]>=0]
   prix[ticker]=prix[ticker].sort_index().reset_index()
   print("Nombre lignes supprimées car Close manquant ou négatif :", nbre_lignes_avant - len(prix[ticker]))
-  print("Valeurs NAV manquantes après nettoyage :", prix[ticker]["Close"].isna().sum())
+  print("Valeurs Close manquantes après nettoyage :", prix[ticker]["Close"].isna().sum())
   print(prix[ticker][["Close", "Volume"]].head())
 
 #Affichage de la première et dernière date pour chaque ETF : utile pour merge plus tard
