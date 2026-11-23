@@ -83,7 +83,6 @@ for ticker in etfs:
 
 
 #Fusion des NAV et prix de marché : on conserve uniquement les dates communes à la NAV et au prix de clôture.
-#Le tableau contient donc une ligne par ETF et par date, avec le prix, la NAV, le volume et la prime / décôte
 #on conserve les volumes pour avoir une mesure de la liqudité, pour plus tard
 
 type_etf = {"SPY": "Actions américaines", "SPEM": "Actions émergentes", "SPIB": "Obligations investment grade", "SPHY": "Obligations high yield"}
@@ -93,6 +92,9 @@ tableaux = []
 
 for ticker in etfs : 
     nav_merge = nav[ticker.lower()][["Date", "NAV"]].copy()
+    # Le split 2:1 sur SPEM survenu le 16/10/2017 est désormais pris en compte.
+    if ticker == "SPEM":
+       nav_merge.loc[nav_merge["Date"] < pd.Timestamp("2017-10-16"), "NAV"] /= 2
     prix_merge = prix[ticker].reindex(columns=["Date", "Close", "Volume"]).copy()
 
     jointure = pd.merge(nav_merge,prix_merge, on = "Date", how = "inner")
@@ -107,9 +109,6 @@ for ticker in etfs :
 
 donnees = pd.concat(tableaux, ignore_index = True)
 donnees = donnees.sort_values(["ETF", "Date"]).reset_index(drop=True)
-
-# Anomalie repérée : l'écart sur SPEM dépasse 90% avant octobre 2017. 
-# Les données de NAV SSGA et les prix yfinance semblent ne pas être sur la même échelle (split d'actions probable).
 
 Statistiques_ecarts = (donnees.groupby(["ETF", "Classe", "Type"]).agg(
         Nombre_observations=("Date", "size"),
