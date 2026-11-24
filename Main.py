@@ -266,3 +266,64 @@ def analyser_et_tracer_regimes(donnees):
 vix = charger_vix(donnees["Date"].min(), donnees["Date"].max())
 donnees = ajouter_regimes_marche(donnees, vix)
 analyser_et_tracer_regimes(donnees)
+
+# =====================================================================
+# 5. Analyse des écarts 
+# =====================================================================
+
+# Seuil à partir duquel on considère l'écart comme important (on a calculé au dessus ça représente <2% de l'échantillon des jours)
+seuil_ecart = 0.25
+
+# Trier les données par ETF et par date
+donnees = donnees.sort_values(["ETF", "Date"]).copy()
+
+# Écart absolu observé le jour suivant, sans mélanger les ETF
+ecart_lendemain = donnees.groupby("ETF")["Abs_prime_decote_pct"].shift(-1)
+# Variation de l'écart entre aujourd'hui et demain
+donnees["Variation_abs_1j"] = ecart_lendemain - donnees["Abs_prime_decote_pct"]
+
+# True si l'écart diminue le lendemain, la dernière date de chaque ETF n'a pas de lendemain
+donnees["Correction_lendemain"] = np.where(ecart_lendemain.notna(), donnees["Variation_abs_1j"] < 0, np.nan)
+
+# On garde uniquement les écarts importants
+donnees_ecarts_importants = donnees[(donnees["Abs_prime_decote_pct"] >= seuil_ecart) & (ecart_lendemain.notna())].copy()
+
+# Résumé des corrections
+vitesse_correction = (donnees_ecarts_importants.groupby(["ETF", "Classe", "Type"])
+    .agg(Nb_dates=("Correction_lendemain", "count"),
+        Taux_correction_pct=("Correction_lendemain", lambda x: x.mean() * 100),
+        Variation_abs_moyenne_1j=("Variation_abs_1j","mean"))
+    .reset_index())
+
+print(vitesse_correction.round(4))
+
+
+#Modélisation 
+
+# Calcul de l'écart du lendemain
+donnees_ecarts_importants["Ecart_abs_1j"] = (donnees_ecarts_importants["Abs_prime_decote_pct"]
+    + donnees_ecarts_importants["Variation_abs_1j"])
+
+fig, axes = plt.subplots(2, 2, figsize=(14, 9))
+axes = axes.flatten()
+
+for ax, (ticker, groupe) in zip(axes, donnees_ecarts_importants.groupby("ETF")):
+
+    ax.scatter(groupe["Abs_prime_decote_pct"], groupe["Ecart_abs_1j"], alpha=0.35, s=12)
+
+    valeur_max = max(groupe["Abs_prime_decote_pct"].max(), groupe["Ecart_abs_1j"].max())
+
+    # Ligne indiquant une absence de changement
+    ax.plot([0, valeur_max], [0, valeur_max], color="black", linestyle="--")
+
+    ax.set_title(f"Correction des écarts : {ticker}")
+    ax.set_xlabel("Écart absolu aujourd'hui (%)")
+    ax.set_ylabel("Écart absolu le lendemain (%)")
+    ax.grid(True)
+
+fig.suptitle("Évolution des écarts importants entre deux séances", fontsize=15)
+
+plt.tight_layout()
+plt.show()
+
+#Au dessus de la diagonale : correction, en dessous, aggravation de l'écart
