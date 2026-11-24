@@ -152,3 +152,117 @@ for ax, (ticker, groupe) in zip(axes, donnees.groupby("ETF", sort=False)): #cett
 fig.suptitle("Évolution de la prime/décote par ETF", fontsize=16) #titre des 4 graphes ensemble
 plt.tight_layout()
 plt.show()
+
+
+# =====================================================================
+# 4. Volatilité (VIX), liquidité et ampleur des écarts
+# =====================================================================
+import numpy as np
+
+
+def charger_vix(date_debut, date_fin):
+    """Télécharge et nettoie l'indice VIX (borne end inclusive via +1 jour)."""
+    vix = yf.download(
+        "^VIX",
+        start=date_debut,
+        end=date_fin + pd.Timedelta(days=1),
+        auto_adjust=False,
+        progress=False,
+    )
+    if isinstance(vix.columns, pd.MultiIndex):
+        vix.columns = vix.columns.get_level_values(0)
+    vix = vix.reset_index().rename(columns={"Close": "VIX"})
+    vix["Date"] = pd.to_datetime(vix["Date"], errors="coerce")
+    return vix[["Date", "VIX"]].dropna().drop_duplicates("Date")
+
+
+def ajouter_regimes_marche(donnees, vix):
+    """Ajoute les régimes de volatilité (VIX) et de liquidité (quartiles par ETF)."""
+    df = donnees.merge(vix, on="Date", how="left")
+    df["Regime_volatilite"] = np.select(
+        [df["VIX"] < 15, df["VIX"] >= 30],
+        ["Faible", "Forte"],
+        default="Intermédiaire",
+    )
+
+    groupes_regimes = []
+    for _, groupe in df.groupby("ETF", sort=False):
+        groupe = groupe.copy()
+        vol_q25, vol_q75 = groupe["Volume"].quantile([0.25, 0.75])
+        groupe["Regime_liquidite"] = np.select(
+            [groupe["Volume"] <= vol_q25, groupe["Volume"] >= vol_q75],
+            ["Faible", "Forte"],
+            default="Intermédiaire",
+        )
+        groupes_regimes.append(groupe)
+
+    return pd.concat(groupes_regimes, ignore_index=True).sort_values(["ETF", "Date"]).reset_index(drop=True)
+
+
+def analyser_et_tracer_regimes(donnees):
+    """Affiche les statistiques par régime et trace la comparaison volatilité / liquidité."""
+    comparaison_volatilite = (
+        donnees[donnees["Regime_volatilite"].isin(["Faible", "Forte"])]
+        .groupby(["Type", "Regime_volatilite"])
+        .agg(
+            Nb_jours=("Date", "size"),
+            Prime_moyenne_pct=("Prime_decote_pct", "mean"),
+            Ecart_absolu_moyen_pct=("Abs_prime_decote_pct", "mean"),
+        )
+        .reset_index()
+    )
+    print("\n--- Comparaison selon la volatilité ---")
+    print(comparaison_volatilite.round(4))
+
+    comparaison_liquidite = (
+        donnees[donnees["Regime_liquidite"].isin(["Faible", "Forte"])]
+        .groupby(["Type", "Regime_liquidite"])
+        .agg(
+            Nb_jours=("Date", "size"),
+            Prime_moyenne_pct=("Prime_decote_pct", "mean"),
+            Ecart_absolu_moyen_pct=("Abs_prime_decote_pct", "mean"),
+        )
+        .reset_index()
+    )
+    print("\n--- Comparaison selon la liquidité ---")
+    print(comparaison_liquidite.round(4))
+
+    graph_volatilite = (
+        donnees[donnees["Regime_volatilite"].isin(["Faible", "Forte"])]
+        .groupby(["ETF", "Regime_volatilite"])["Abs_prime_decote_pct"]
+        .mean()
+        .unstack()
+        .reindex(columns=["Faible", "Forte"])
+    )
+    graph_liquidite = (
+        donnees[donnees["Regime_liquidite"].isin(["Faible", "Forte"])]
+        .groupby(["ETF", "Regime_liquidite"])["Abs_prime_decote_pct"]
+        .mean()
+        .unstack()
+        .reindex(columns=["Faible", "Forte"])
+    )
+
+    # Visualisation : comparaison entre volatilité faible/forte et liquidité faible/forte
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    graph_volatilite.plot(kind="bar", ax=axes[0], color=["blue", "red"])
+    axes[0].set_title("Écart absolu moyen selon la volatilité")
+    axes[0].set_xlabel("ETF")
+    axes[0].set_ylabel("Écart absolu moyen (%)")
+    axes[0].legend(title="Volatilité")
+    axes[0].grid(axis="y")
+
+    graph_liquidite.plot(kind="bar", ax=axes[1], color=["blue", "red"])
+    axes[1].set_title("Écart absolu moyen selon la liquidité")
+    axes[1].set_xlabel("ETF")
+    axes[1].set_ylabel("Écart absolu moyen (%)")
+    axes[1].legend(title="Liquidité")
+    axes[1].grid(axis="y")
+
+    plt.tight_layout()
+    plt.show()
+
+
+vix = charger_vix(donnees["Date"].min(), donnees["Date"].max())
+donnees = ajouter_regimes_marche(donnees, vix)
+analyser_et_tracer_regimes(donnees)
