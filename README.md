@@ -73,3 +73,11 @@ pip install -r requirements.txt
 jupyter notebook Projet_Python_S1.ipynb
 ```
 *(Ou en script : `python Main.py`.)*
+
+## Équipe & répartition
+
+| Membre | Contributions principales |
+| --- | --- |
+| **Achille Quesne** (`AQsne`) | Collecte & nettoyage SSGA / `yfinance`, structuration initiale des données & Pull Request #1 |
+| **Noah Dormeuil** (`haruspex974`) | Fusion NAV/prix, ajustement du split `SPEM` 2:1, statistiques descriptives, dynamique $t+1$, `requirements.txt` & `README.md` |
+| **Evan** (`Evan-ipp`) | Régimes de volatilité (`^VIX`) et liquidité par ETF, factorisation modulaire (`src/`), notebook rapport `.ipynb`, `.gitignore`, Pull Requests & validation SSPCloud |
